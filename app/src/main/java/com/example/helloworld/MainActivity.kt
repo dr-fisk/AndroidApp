@@ -1,9 +1,9 @@
 package com.example.helloworld
 
-import android.app.PendingIntent.getActivity
 import android.content.Context
 import android.os.Bundle
-import android.view.View
+import android.util.Log
+import android.view.KeyEvent
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,31 +15,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.helloworld.ui.theme.HelloWorldTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
 
 class UiState : ViewModel()
 {
-    var openTextBox by mutableStateOf(false)
+    var messageText by mutableStateOf("")
 }
 
 class MainActivity : ComponentActivity()
@@ -50,12 +42,12 @@ class MainActivity : ComponentActivity()
       }
     }
 
-    private val _UiState : MutableLiveData<UiState> = MutableLiveData(UiState())
+    private val mUiState : MutableLiveData<UiState> = MutableLiveData(UiState())
 
     external fun getString(str: String): String
 
     @Composable
-    fun ChatScreen()
+    fun ChatScreen(context : Context)
     {
         Box(
             Modifier
@@ -63,7 +55,7 @@ class MainActivity : ComponentActivity()
                 .fillMaxHeight(0.95f)
                 .background(Color.Black)
                 .clickable(
-                    onClick = { _UiState.value!!.openTextBox = false },
+                    onClick = { closeKeyboard(context) },
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 )
@@ -72,14 +64,49 @@ class MainActivity : ComponentActivity()
         }
     }
 
-    @Composable
-    fun TextBox()
+    private fun isChar(keycode : Int) : Boolean
     {
-        var textStr = "Text Box"
-
-        if(_UiState.value!!.openTextBox)
+        val minKeyCode = 32
+        val maxKeyCode = 126
+        val newLine = 10
+        return (((minKeyCode <= keycode) && (maxKeyCode >= keycode)) || (newLine == keycode))
+    }
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (event == null)
         {
-            textStr= "Text Box Opened"
+            return false
+        }
+
+        if (event.action == KeyEvent.ACTION_UP)
+        {
+
+            if (isChar(event.getUnicodeChar(event.metaState)))
+            {
+                mUiState.value!!.messageText += event.getUnicodeChar(event.metaState).toChar()
+            }
+            else
+            {
+                // Delete key is pressed, remove last character if string is not empty
+                if (event.keyCode == KeyEvent.KEYCODE_DEL &&
+                    mUiState.value!!.messageText.isNotEmpty() )
+                {
+                    mUiState.value!!.messageText = mUiState.value!!.messageText.dropLast(1)
+                }
+            }
+        }
+
+        return super.onKeyUp(keyCode, event)
+    }
+
+    @Composable
+    fun TextBox(context : Context)
+    {
+        var textStr = "Text Message"
+
+        // Message has been typed so show it on the UI
+        if (mUiState.value!!.messageText.isNotEmpty())
+        {
+            textStr = mUiState.value!!.messageText
         }
 
         Box(
@@ -87,14 +114,14 @@ class MainActivity : ComponentActivity()
                 .fillMaxWidth(0.80f)
                 .fillMaxHeight()
                 .background(Color(10, 10, 10))
-                .clickable(onClick = { _UiState.value!!.openTextBox = true })
+                .clickable(onClick = { openKeyboard(context) })
         ) {
             Text(text = textStr, color = Color.White)
         }
     }
 
     @Composable
-    fun MainChat(context: Context, view : View) {
+    fun MainChat(context: Context) {
         Row ( horizontalArrangement = Arrangement.SpaceBetween ){
 //        Column {
 //            Box(
@@ -107,8 +134,8 @@ class MainActivity : ComponentActivity()
 //            }
 //        }
             Column(verticalArrangement = Arrangement.Top) {
-                ChatScreen()
-                Row {
+                ChatScreen(context)
+                Row(Modifier .fillMaxHeight()) {
                     Box(
                         Modifier
                             .width(30.dp)
@@ -123,7 +150,7 @@ class MainActivity : ComponentActivity()
                             .fillMaxHeight()
                             .background(Color.Black)
                     )
-                    TextBox()
+                    TextBox(context)
                     Box(
                         Modifier
                             .width(10.dp)
@@ -152,29 +179,27 @@ class MainActivity : ComponentActivity()
                         .fillMaxHeight()
                         .background(Color.Black)
                 )
-                keyboard(context, window.decorView)
             }
         }
     }
 
-    fun keyboard(context: Context, view : View)
+    private fun openKeyboard(context: Context)
     {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        if(_UiState.value!!.openTextBox)
-        {
-            imm.showSoftInput(view, 0);
-        }
-        else
-        {
-            imm.hideSoftInputFromWindow(view.windowToken, 0)
-        }
+        imm.showSoftInput(window.decorView, 0)
+    }
+
+    private fun closeKeyboard(context: Context)
+    {
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(window.decorView.windowToken, 0)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val context: Context = this
         setContent {
-            MainChat(context, window.decorView)
+            MainChat(context)
         }
     }
 }
