@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -48,10 +49,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -79,9 +82,9 @@ class MainActivity : ComponentActivity()
     {
         Box(
             Modifier
+                .padding(bottom = 10.dp)
                 .fillMaxWidth()
                 .fillMaxHeight(0.88f)
-                .padding(bottom = 10.dp)
                 .background(Color.Black)
                 .clickable(
                     onClick = { closeKeyboard(context) },
@@ -109,7 +112,7 @@ class MainActivity : ComponentActivity()
 
         if (mUiState.value!!.messageText.isNotEmpty())
         {
-            width = 1.0f
+            width = 0.85f
             height = 100.dp
         }
 
@@ -124,9 +127,78 @@ class MainActivity : ComponentActivity()
                       focusedIndicatorColor = Color.Transparent,
                       unfocusedIndicatorColor = Color.Transparent,
                       disabledIndicatorColor = Color.Transparent),
-                  modifier = Modifier .fillMaxWidth(width) .height(height),
+                  modifier = Modifier
+                      .fillMaxWidth(width)
+                      .height(height),
                   singleLine = false,
                   maxLines = 3)
+    }
+
+    private fun temp()
+    {
+    }
+    @Composable
+    private fun SendButton()
+    {
+        if (mUiState.value!!.messageText.isNotEmpty())
+        {
+            Box(
+                Modifier
+                    .padding(vertical = 15.dp, horizontal = 5.dp)
+                    .width(50.dp)
+                    .height(50.dp)
+                    .background(Color(10, 10, 10), CircleShape)
+                    .clickable(
+                        onClick = { temp() },
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ),
+                contentAlignment = Alignment.Center
+            )
+            {
+                Text(text = "Send", color = Color.White, textAlign = TextAlign.Center,
+                     modifier = Modifier.padding(horizontal = 1.dp)
+                     .wrapContentHeight())
+            }
+        }
+    }
+
+    @Composable
+    private fun StandardUi(context: Context)
+    {
+        if (mUiState.value!!.messageText.isEmpty())
+        {
+            Box(
+                Modifier
+                    .offset(x = -10.dp)
+                    .width(40.dp)
+                    .height(50.dp)
+                    .background(Color(10, 10, 10), CircleShape),
+                contentAlignment = Alignment.Center
+            )
+            {
+                Text(text = "Box", color = Color.White, textAlign = TextAlign.Center,
+                     modifier = Modifier.padding(horizontal = 1.dp)
+                     .wrapContentHeight())
+            }
+        }
+        TextBox(context)
+        if (mUiState.value!!.messageText.isEmpty())
+        {
+            Box(
+                Modifier
+                    .offset(x = 10.dp)
+                    .width(40.dp)
+                    .height(50.dp)
+                    .background(Color(10, 10, 10), CircleShape),
+                    contentAlignment = Alignment.Center
+            )
+            {
+                Text(text = "Misc", color = Color.White, textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 1.dp)
+                    .wrapContentHeight())
+            }
+        }
     }
 
     @Composable
@@ -145,38 +217,17 @@ class MainActivity : ComponentActivity()
                     .width(IntrinsicSize.Max)
                     .background(color = Color.Black)
                     .padding(16.dp)
-            ) {
+            )
+            {
                 ChatScreen(context)
                 Row(
                     Modifier
                         .height(IntrinsicSize.Max)
                         .width(IntrinsicSize.Max)
-                ) {
-                    if (mUiState.value!!.messageText.isEmpty())
-                    {
-                        Box(
-                            Modifier
-                                .width(40.dp)
-                                .height(50.dp)
-                                .offset(x = -10.dp)
-                                .background(Color(10, 10, 10), CircleShape)
-                        ) {
-                            Text(text = "Box", color = Color.White)
-                        }
-                    }
-                    TextBox(context)
-                    if (mUiState.value!!.messageText.isEmpty())
-                    {
-                        Box(
-                            Modifier
-                                .width(40.dp)
-                                .height(50.dp)
-                                .offset(x = 10.dp)
-                                .background(Color(10, 10, 10), CircleShape)
-                        ) {
-                            Text(text = "Misc", color = Color.White)
-                        }
-                    }
+                )
+                {
+                    StandardUi(context)
+                    SendButton()
                 }
             }
         }
