@@ -17,10 +17,11 @@
             android:exported="true"
             android:label="@string/app_name"
             android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.HelloWorld">
+            android:theme="@style/Theme.HelloWorld"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
