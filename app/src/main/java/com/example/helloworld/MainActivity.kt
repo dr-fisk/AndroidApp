@@ -2,34 +2,23 @@ package com.example.helloworld
 
 import android.content.Context
 import android.os.Bundle
-import android.util.DisplayMetrics
 import android.util.Log
-import android.view.KeyEvent
+import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
-import android.widget.EditText
 import android.widget.ScrollView
-import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -50,32 +39,37 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 
+class ClientInfo
+{
+    var clientFd by mutableStateOf(-1)
+}
+
 class UiState : ViewModel()
 {
     var messageText by mutableStateOf("")
-    var messageScrollState by mutableStateOf(0)
 }
 
 class MainActivity : ComponentActivity()
 {
     companion object {
       init {
-         System.loadLibrary("helloworld")
+         System.loadLibrary("client")
       }
     }
 
     private val mUiState : MutableLiveData<UiState> = MutableLiveData(UiState())
+    private val mClientInfo : MutableLiveData<ClientInfo> = MutableLiveData(ClientInfo())
 
     external fun getString(str: String): String
+    external fun connectToServer() : Int
+    external fun close(fd : Int)
+
+    external fun send(fd : Int, msg : String) : Int
 
     @Composable
     fun ChatScreen(context : Context)
@@ -91,21 +85,14 @@ class MainActivity : ComponentActivity()
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 )
+
         ) {
             Text(text = "Chat Screen", color = Color.White)
         }
     }
 
-    private fun isChar(keycode : Int) : Boolean
-    {
-        val minKeyCode = 32
-        val maxKeyCode = 126
-        val newLine = 10
-        return (((minKeyCode <= keycode) && (maxKeyCode >= keycode)) || (newLine == keycode))
-    }
-
     @Composable
-    fun TextBox(context : Context)
+    fun TextBox()
     {
         var width = 0.85f
         var height = 50.dp
@@ -134,44 +121,31 @@ class MainActivity : ComponentActivity()
                   maxLines = 3)
     }
 
-    private fun temp()
+    private fun sendMsg()
     {
-    }
-    @Composable
-    private fun SendButton()
-    {
-        if (mUiState.value!!.messageText.isNotEmpty())
-        {
-            Box(
-                Modifier
-                    .padding(vertical = 15.dp, horizontal = 5.dp)
-                    .width(50.dp)
-                    .height(50.dp)
-                    .background(Color(10, 10, 10), CircleShape)
-                    .clickable(
-                        onClick = { temp() },
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ),
-                contentAlignment = Alignment.Center
-            )
+        if (mUiState.value!!.messageText.isNotEmpty()) {
+            if(0 > send(mClientInfo.value!!.clientFd, mUiState.value!!.messageText))
             {
-                Text(text = "Send", color = Color.White, textAlign = TextAlign.Center,
-                     modifier = Modifier.padding(horizontal = 1.dp)
-                     .wrapContentHeight())
+               Log.e("sendMsg", "Msg failed to send")
             }
+            mUiState.value!!.messageText = ""
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        close(mClientInfo.value!!.clientFd)
+    }
+
     @Composable
-    private fun StandardUi(context: Context)
+    private fun StandardUi()
     {
         if (mUiState.value!!.messageText.isEmpty())
         {
             Box(
                 Modifier
-                    .offset(x = -10.dp)
-                    .width(40.dp)
+                    .offset(x = (-10).dp)
+                    .width(50.dp)
                     .height(50.dp)
                     .background(Color(10, 10, 10), CircleShape),
                 contentAlignment = Alignment.Center
@@ -182,22 +156,33 @@ class MainActivity : ComponentActivity()
                      .wrapContentHeight())
             }
         }
-        TextBox(context)
-        if (mUiState.value!!.messageText.isEmpty())
+
+        TextBox()
+
+        var textStr = "Misc"
+
+        if (mUiState.value!!.messageText.isNotEmpty())
         {
-            Box(
-                Modifier
-                    .offset(x = 10.dp)
-                    .width(40.dp)
-                    .height(50.dp)
-                    .background(Color(10, 10, 10), CircleShape),
-                    contentAlignment = Alignment.Center
-            )
-            {
-                Text(text = "Misc", color = Color.White, textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 1.dp)
-                    .wrapContentHeight())
-            }
+            textStr = "Send"
+        }
+
+        Box(
+            Modifier
+                .offset(x = 10.dp)
+                .width(50.dp)
+                .height(50.dp)
+                .background(Color(10, 10, 10), CircleShape)
+                .clickable(
+                        onClick = { sendMsg() },
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ),
+                contentAlignment = Alignment.Center
+        )
+        {
+            Text(text = textStr, color = Color.White, textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 1.dp)
+                .wrapContentHeight())
         }
     }
 
@@ -226,8 +211,7 @@ class MainActivity : ComponentActivity()
                         .width(IntrinsicSize.Max)
                 )
                 {
-                    StandardUi(context)
-                    SendButton()
+                    StandardUi()
                 }
             }
         }
@@ -249,9 +233,21 @@ class MainActivity : ComponentActivity()
         WindowCompat.setDecorFitsSystemWindows(window, true)
         super.onCreate(savedInstanceState)
         val context: Context = this
+        window.setDecorFitsSystemWindows(false)
+        mClientInfo.value!!.clientFd = connectToServer()
+
+        if (mClientInfo.value!!.clientFd < 0)
+        {
+            Log.e("onCreate", "Failed to connect")
+        }
+        else
+        {
+            Log.e("onCreate", "Connection success")
+        }
+
+        //Create sockets
         setContent {
             MainChat(context)
         }
-        ScrollView(this)
     }
 }
