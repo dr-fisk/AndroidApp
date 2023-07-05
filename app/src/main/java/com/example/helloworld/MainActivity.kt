@@ -30,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextAlign
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -76,7 +78,7 @@ class MainActivity : ComponentActivity()
     {
         Box(
             Modifier
-                .padding(bottom = 10.dp)
+                .padding(bottom = 10.dp, top = 10.dp)
                 .fillMaxWidth()
                 .fillMaxHeight(0.88f)
                 .background(Color.Black)
@@ -94,8 +96,8 @@ class MainActivity : ComponentActivity()
     @Composable
     fun TextBox()
     {
-        var width = 0.85f
-        var height = 50.dp
+        var width = 0.80f
+        var height = 56.dp
 
         if (mUiState.value!!.messageText.isNotEmpty())
         {
@@ -145,8 +147,8 @@ class MainActivity : ComponentActivity()
             Box(
                 Modifier
                     .offset(x = (-10).dp)
-                    .width(50.dp)
-                    .height(50.dp)
+                    .width(56.dp)
+                    .height(56.dp)
                     .background(Color(10, 10, 10), CircleShape),
                 contentAlignment = Alignment.Center
             )
@@ -169,8 +171,8 @@ class MainActivity : ComponentActivity()
         Box(
             Modifier
                 .offset(x = 10.dp)
-                .width(50.dp)
-                .height(50.dp)
+                .width(56.dp)
+                .height(56.dp)
                 .background(Color(10, 10, 10), CircleShape)
                 .clickable(
                         onClick = { sendMsg() },
@@ -234,6 +236,8 @@ class MainActivity : ComponentActivity()
         super.onCreate(savedInstanceState)
         val context: Context = this
         window.setDecorFitsSystemWindows(false)
+        window.statusBarColor = resources.getColor(R.color.black, theme)
+        window.navigationBarColor = resources.getColor(R.color.black, theme)
         mClientInfo.value!!.clientFd = connectToServer()
 
         if (mClientInfo.value!!.clientFd < 0)

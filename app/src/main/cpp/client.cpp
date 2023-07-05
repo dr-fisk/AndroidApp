@@ -1,20 +1,3 @@
-// Write C++ code here.
-//
-// Do not forget to dynamically load the C++ library into your application.
-//
-// For instance,
-//
-// In MainActivity.java:
-//    static {
-//       System.loadLibrary("helloworld");
-//    }
-//
-// Or, in MainActivity.kt:
-//    companion object {
-//      init {
-//         System.loadLibrary("helloworld")
-//      }
-//    }
 #include <jni.h>
 #include <iostream>
 #include <string>
@@ -25,6 +8,9 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstdlib>
+#include<future>
+#include "./libs/openssl-android-arm64-v8a/include/openssl/ssl.h"
+
 
 enum RetType
 {
@@ -130,5 +116,20 @@ void Java_com_example_helloworld_MainActivity_close(JNIEnv * env, jobject obj, j
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_helloworld_MainActivity_send(JNIEnv * env, jobject obj, jint fd, jstring msg)
 {
-    return send(fd, env->GetStringUTFChars(msg, NULL), env->GetStringLength(msg), 0);
+    const int16_t MAX_BUFF_SIZE = 1500;
+    int16_t msgSize = htons(env->GetStringLength(msg));
+    int16_t origSize = env->GetStringLength(msg);
+
+    if (MAX_BUFF_SIZE < origSize)
+    {
+        return -1;
+    }
+
+    char buff[MAX_BUFF_SIZE + sizeof(msgSize)];
+
+    buff[0] = (0xff & msgSize);
+    buff[1] = (0xff & (msgSize >> 8));
+    memcpy(&buff[0] + sizeof(msgSize), env->GetStringUTFChars(msg, NULL), origSize);
+
+    return send(fd, buff, origSize + sizeof(msgSize), 0);
 }

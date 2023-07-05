@@ -7,7 +7,6 @@
 cmake_minimum_required(VERSION 3.22.1)
 
 # Declares and names the project.
-
 project("client")
 
 # Creates and names a library, sets it as either STATIC
@@ -22,7 +21,19 @@ add_library( # Sets the name of the library.
              SHARED
 
              # Provides a relative path to your source file(s).
-        client.cpp)
+             client.cpp
+        )
+
+add_library(ssl
+            STATIC
+            IMPORTED
+            )
+
+set_target_properties(ssl PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/libs/openssl-android-arm64-v8a/lib/libssl.a)
+
+target_include_directories(ssl INTERFACE ${PROJECT_SOURCE_DIR}/libs/openssl-android-arm64-v8a/include/openssl)
+
+include_directories(${PROJECT_SOURCE_DIR}/libs/openssl-android-arm64-v8a/include/)
 
 # Searches for a specified prebuilt library and stores the path as a
 # variable. Because CMake includes system libraries in the search path by
@@ -31,9 +42,8 @@ add_library( # Sets the name of the library.
 # completing its build.
 
 find_library( # Sets the name of the path variable.
-              log-lib
-
               # Specifies the name of the NDK library that
+              log-lib
               # you want CMake to locate.
               log )
 
@@ -43,7 +53,7 @@ find_library( # Sets the name of the path variable.
 
 target_link_libraries( # Specifies the target library.
                        client
-
                        # Links the target library to the log library
+                       ssl
                        # included in the NDK.
                        ${log-lib} )
