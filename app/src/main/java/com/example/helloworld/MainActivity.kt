@@ -219,12 +219,6 @@ class MainActivity : ComponentActivity()
         }
     }
 
-    private fun openKeyboard(context: Context)
-    {
-        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.showSoftInput(window.decorView, 0)
-    }
-
     private fun closeKeyboard(context: Context)
     {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -246,7 +240,7 @@ class MainActivity : ComponentActivity()
         }
         else
         {
-            Log.e("onCreate", "Connection success")
+            Log.e("onCreate", "Connection success " + mClientInfo.value!!.clientFd.toString())
         }
 
         //Create sockets
