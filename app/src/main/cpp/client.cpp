@@ -12,6 +12,7 @@
 #include <openssl/ssl.h>
 #include "libs/json/json.hpp"
 #include <android/log.h>
+#include <poll.h>
 
 SSL_CTX *gpCtx;
 SSL *gpSsl;
@@ -42,22 +43,17 @@ Java_com_example_helloworld_MainActivity_getString(JNIEnv * env, jobject obj, js
 int32_t openSslConnect(const int32_t cClientFd)
 {
     int32_t status = 0;
-    timeval tv;
-    tv.tv_sec = 1;
-    tv.tv_usec = 0;
-    fd_set readRdy;
-    fd_set writeRdy;
-    FD_ZERO(&readRdy);
-    FD_SET(cClientFd, &readRdy);
-
-    FD_ZERO(&writeRdy);
-    FD_SET(cClientFd, &writeRdy);
+    pollfd fdReady[1];
+    fdReady[0].fd = cClientFd;
+    fdReady[0].events = POLLIN;
+    fdReady[0].revents = 0;
 
     while (true)
     {
         status = SSL_connect(gpSsl);
         if (0 < status)
         {
+            __android_log_print(ANDROID_LOG_ERROR, "TRACKERS", "SSL Connection");
             return 0;
         }
 
@@ -76,15 +72,16 @@ int32_t openSslConnect(const int32_t cClientFd)
                 status = 1;
                 break;
             case SSL_ERROR_WANT_READ:
-                status = select(cClientFd + 1, &readRdy, NULL, NULL, &tv);
+                fdReady[0].events = POLLIN;
+                status = poll(fdReady, 1, 1000);
                 break;
             case SSL_ERROR_WANT_WRITE:
-                status = select(cClientFd + 1, NULL, &writeRdy, NULL, &tv);
+                fdReady[0].events = POLLOUT;
+                status = poll(fdReady, 1, 1000);
                 break;
             default:
                 return -1;
         }
-
 
         if (0 >= status)
         {
@@ -96,12 +93,12 @@ int32_t openSslConnect(const int32_t cClientFd)
 int32_t checkConnectionStatus(sockaddr_in &rServerAddr, const int32_t cClientFd, const int32_t cStatus)
 {
     int32_t status = cStatus;
-    timeval tv;
-    tv.tv_sec = 5;
-    tv.tv_usec = 0;
     socklen_t statusSize = sizeof(status);
     socklen_t serverSize = sizeof(rServerAddr);
-    fd_set socketWatch;
+    pollfd fdReady[1];
+    fdReady[0].fd = cClientFd;
+    fdReady[0].events = POLLIN;
+    fdReady[0].revents = 0;
 
     // Connection is not in progress so no connection can happen return failure
     if (-1 == status && errno != EINPROGRESS)
@@ -113,9 +110,7 @@ int32_t checkConnectionStatus(sockaddr_in &rServerAddr, const int32_t cClientFd,
     // If connection status is not -1 that means connection was immediate
     if (-1 == status)
     {
-        FD_ZERO(&socketWatch);
-        FD_SET(cClientFd, &socketWatch);
-        status = select(cClientFd + 1, NULL, NULL, &socketWatch, &tv);
+        status = poll(fdReady, 1, 100);
 
         // Get the error code returned from select using getsockopt
         if (0 == getsockopt(cClientFd, SOL_SOCKET, SO_ERROR, &status, &statusSize))
@@ -142,16 +137,17 @@ int32_t attemptConnection(const std::string &crIp)
     uint8_t num_tries = 0;
     int32_t status = -1;
     int clientFd = -1;
+    gpSsl = SSL_new(gpCtx);
 
     while (gRETRIES > num_tries)
     {
-        gpSsl = SSL_new(gpCtx);
         clientFd = socket(AF_INET, SOCK_STREAM, 0);
 
         if (clientFd < 0)
         {
             return RetType::SOCKET_FAILED;
         }
+
         fcntl(clientFd, F_SETFL, O_NONBLOCK);
         SSL_set_fd(gpSsl, clientFd);
 
@@ -159,6 +155,7 @@ int32_t attemptConnection(const std::string &crIp)
         status = connect(clientFd, (sockaddr *) &server, sizeof(server));
         status = checkConnectionStatus(server, clientFd, status);
 
+        __android_log_print(ANDROID_LOG_ERROR, "TRACKERS", "%s", crIp.c_str());
         // Connection successful
         if (0 == status && 0 == openSslConnect(clientFd))
         {
@@ -167,8 +164,6 @@ int32_t attemptConnection(const std::string &crIp)
 
         num_tries ++;
         close(clientFd);
-        SSL_shutdown(gpSsl);
-        SSL_free(gpSsl);
         clientFd = -1;
     }
 
@@ -201,6 +196,10 @@ void Java_com_example_helloworld_MainActivity_close(JNIEnv * env, jobject obj, j
     {
         close(fd);
     }
+
+    SSL_shutdown(gpSsl);
+    SSL_free(gpSsl);
+    SSL_CTX_free(gpCtx);
 }
 
 extern "C" JNIEXPORT jint JNICALL
