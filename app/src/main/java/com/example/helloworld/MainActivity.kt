@@ -55,16 +55,24 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import org.intellij.lang.annotations.JdkConstants.HorizontalAlignment
 
+enum class ClientState(val rgb: Int)
+{
+    LOGGED_OUT(0x01),
+    LOGGED_IN(0x02),
+    CREATE_ACC(0x03)
+}
+
 class ClientInfo
 {
     var clientFd by mutableStateOf(-1)
-    var clientLoggedIn by mutableStateOf(false)
+    var clientState by mutableStateOf(ClientState.LOGGED_OUT)
 }
 
 class UiState : ViewModel()
 {
     var messageText by mutableStateOf("")
     var passwordText by mutableStateOf("")
+    var confPasswordText by mutableStateOf("")
     var kbdOpen by mutableStateOf(false)
 }
 
@@ -77,6 +85,12 @@ class MainActivity : ComponentActivity()
       }
     }
 
+    fun clearUiStateInfo()
+    {
+        mUiState.value!!.messageText = ""
+        mUiState.value!!.passwordText = ""
+        mUiState.value!!.confPasswordText = ""
+    }
     fun getClientFd() : Int
     {
         return mClientInfo.value!!.clientFd
@@ -271,18 +285,19 @@ class MainActivity : ComponentActivity()
     }
 
     @Composable
-    private fun loginScreen(context : Context)
+    fun createAccScreen(context : Context)
     {
-        var cursColor = Color.Unspecified
-
-        if (mUiState.value!!.kbdOpen)
-        {
-            cursColor = Color.Gray;
-        }
+        val confirmPasswordString = "Confirm Password:"
+        val passwordString = "Password:"
 
         Surface(modifier = Modifier
             .fillMaxSize()
-)
+            .clickable(
+                onClick = { closeKeyboard(context) },
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            )
+        )
         {
             Column(  modifier = Modifier
                 .verticalScroll(
@@ -292,216 +307,292 @@ class MainActivity : ComponentActivity()
                 .width(IntrinsicSize.Max)
                 .background(color = Color.Black))
             {
-                Box( modifier = Modifier
+                Spacer(modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.2f)
-                    .clickable(
-                        onClick = { closeKeyboard(context) },
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ))
+                    .fillMaxHeight(0.2f))
 
-                TextField(
-                    value = mUiState.value!!.messageText,
-                    onValueChange = { mUiState.value!!.messageText = it },
-                    label = { Text("Email:") },
-                    placeholder = { Text("") }, shape = RectangleShape,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    colors = TextFieldDefaults.textFieldColors(
-                        containerColor = Color(10, 10, 10),
-                        textColor = Color.White,
-                        cursorColor = cursColor,
-                        placeholderColor = Color.Gray,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent
-                    ),
-                    modifier = Modifier
-                        .padding(horizontal = 10.dp)
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    interactionSource = remember { MutableInteractionSource() }
-                        .also { interactionSource ->
-                            LaunchedEffect(interactionSource) {
-                                interactionSource.interactions.collect {
-                                    if (it is PressInteraction.Release) {
-                                        keyboardOpened()
-                                    }
-                                }
-                            }
-                        },
-                    singleLine = true
-                )
-                Box( modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.1f)
-                    .clickable(
-                        onClick = { closeKeyboard(context) },
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ))
-
-                    TextField(
-                        value = mUiState.value!!.passwordText,
-                        onValueChange = { mUiState.value!!.passwordText = it },
-                        label = { Text("Password:") },
-                        placeholder = { Text("") }, shape = RectangleShape,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        visualTransformation = PasswordVisualTransformation(),
-                        colors = TextFieldDefaults.textFieldColors(
-                            containerColor = Color(10, 10, 10),
-                            textColor = Color.White,
-                            cursorColor = cursColor,
-                            placeholderColor = Color.Gray,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp)
-                            .height(56.dp),
-                        interactionSource = remember { MutableInteractionSource() }
-                            .also { interactionSource ->
-                                LaunchedEffect(interactionSource) {
-                                    interactionSource.interactions.collect {
-                                        if (it is PressInteraction.Release) {
-                                            keyboardOpened()
-                                        }
-                                    }
-                                }
-                            },
-                        singleLine = true
-                    )
+                emailBox(context);
 
                 Box(modifier = Modifier
-                    .height(10.dp)
                     .fillMaxWidth()
-                    .clickable(
-                        onClick = { closeKeyboard(context) },
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ))
+                    .fillMaxHeight(0.1f))
 
-                Column()
-                {
-                    Row(modifier = Modifier
-                        .clickable(
-                            onClick = { closeKeyboard(context) },
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        )
-                        .height(56.dp)
-                        .fillMaxWidth()
-                    )
-                    {
-                        Box(modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(0.37f)
-                            .clickable(
-                                onClick = { closeKeyboard(context) },
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ))
-                        Box(modifier = Modifier
-                            .width(100.dp)
-                            .fillMaxHeight()
-                            .background(color = Color(50, 32, 122))
-                            .clickable(
-                                onClick = { closeKeyboard(context) },
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            )
-                        )
-                        {
-                            Text(
-                                text = "Login", color = Color.White, textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .padding(horizontal = 1.dp, vertical = 1.dp)
-                                    .align(Alignment.Center)
-                            )
-                        }
-                        Box(modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                            .background(color = Color.Black)
-                            .clickable(
-                                onClick = { closeKeyboard(context) },
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            )
-                        )
-                    } // End of Login Row
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(10.dp)
-                            .background(color = Color.Black)
-                            .clickable(
-                                onClick = { closeKeyboard(context) },
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            )
-                    )
-                    Row(modifier = Modifier
-                        .clickable(
-                            onClick = { closeKeyboard(context) },
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        )
-                        .height(56.dp)
-                        .fillMaxWidth()
-                    )
-                    {
-                        Box(modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(0.37f)
-                            .clickable(
-                                onClick = { closeKeyboard(context) },
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ))
-                        Box(modifier = Modifier
-                            .width(100.dp)
-                            .fillMaxHeight()
-                            .background(color = Color(50, 32, 122))
-                            .clickable(
-                                onClick = { closeKeyboard(context) },
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            )
-                        )
-                        {
-                            Text(
-                                text = "Create Account", color = Color.White, textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .padding(horizontal = 1.dp, vertical = 1.dp)
-                                    .align(Alignment.Center)
-                            )
-                        }
-                        Box(modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                            .background(color = Color.Black)
-                            .clickable(
-                                onClick = { closeKeyboard(context) },
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            )
-                        )
-                    } // End of Create Account Row
-                }
-                Box(
+                passwordBox(context, passwordString)
+
+                Spacer(modifier = Modifier
+                    .height(40.dp)
+                    .fillMaxWidth())
+
+                confPasswordBox(context, confirmPasswordString)
+
+                Spacer(
                     modifier = Modifier
-                        .fillMaxHeight()
                         .fillMaxWidth()
+                        .height(10.dp)
                         .background(color = Color.Black)
-                        .clickable(
-                            onClick = { closeKeyboard(context) },
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        )
                 )
+
+                Box(modifier = Modifier
+                    .width(100.dp)
+                    .height(56.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .background(color = Color(50, 32, 122))
+                    .clickable(
+                        onClick = { closeKeyboard(context) }
+                    )
+                )
+                {
+                    Text(
+                        text = "Create Account", color = Color.White, textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .padding(horizontal = 1.dp, vertical = 1.dp)
+                            .align(Alignment.Center)
+                    )
+                }
+
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .background(color = Color.Black)
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun confPasswordBox(context : Context, str : String)
+    {
+        var cursColor = Color.Unspecified
+
+        if (mUiState.value!!.kbdOpen)
+        {
+            cursColor = Color.Gray;
+        }
+
+        Box(modifier = Modifier
+            .height(56.dp)
+            .fillMaxWidth()
+            .clickable(
+                onClick = { closeKeyboard(context) },
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ))
+        {
+            TextField(
+                value = mUiState.value!!.confPasswordText,
+                onValueChange = { mUiState.value!!.confPasswordText = it },
+                label = { Text(str) },
+                placeholder = { Text("") }, shape = RectangleShape,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                visualTransformation = PasswordVisualTransformation(),
+                colors = TextFieldDefaults.textFieldColors(
+                    containerColor = Color(10, 10, 10),
+                    textColor = Color.White,
+                    cursorColor = cursColor,
+                    placeholderColor = Color.Gray,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                ),
+                modifier = Modifier
+                    .padding(horizontal = 15.dp)
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
+                interactionSource = remember { MutableInteractionSource() }
+                    .also { interactionSource ->
+                        LaunchedEffect(interactionSource) {
+                            interactionSource.interactions.collect {
+                                if (it is PressInteraction.Release) {
+                                    keyboardOpened()
+                                }
+                            }
+                        }
+                    },
+                singleLine = true
+            )
+        }
+    }
+    @Composable
+    fun passwordBox(context : Context, str : String)
+    {
+        var cursColor = Color.Unspecified
+
+        if (mUiState.value!!.kbdOpen)
+        {
+            cursColor = Color.Gray;
+        }
+
+        Box(modifier = Modifier
+            .height(56.dp)
+            .fillMaxWidth()
+            .clickable(
+                onClick = { closeKeyboard(context) },
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ))
+        {
+            TextField(
+                value = mUiState.value!!.passwordText,
+                onValueChange = { mUiState.value!!.passwordText = it },
+                label = { Text(str) },
+                placeholder = { Text("") }, shape = RectangleShape,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                visualTransformation = PasswordVisualTransformation(),
+                colors = TextFieldDefaults.textFieldColors(
+                    containerColor = Color(10, 10, 10),
+                    textColor = Color.White,
+                    cursorColor = cursColor,
+                    placeholderColor = Color.Gray,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                ),
+                modifier = Modifier
+                    .padding(horizontal = 15.dp)
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
+                interactionSource = remember { MutableInteractionSource() }
+                    .also { interactionSource ->
+                        LaunchedEffect(interactionSource) {
+                            interactionSource.interactions.collect {
+                                if (it is PressInteraction.Release) {
+                                    keyboardOpened()
+                                }
+                            }
+                        }
+                    },
+                singleLine = true
+            )
+        }
+    }
+
+    @Composable
+    fun emailBox(context : Context)
+    {
+        var cursColor = Color.Unspecified
+
+        if (mUiState.value!!.kbdOpen)
+        {
+            cursColor = Color.Gray;
+        }
+        TextField(
+            value = mUiState.value!!.messageText,
+            onValueChange = { mUiState.value!!.messageText = it },
+            label = { Text("Email:") },
+            placeholder = { Text("") }, shape = RectangleShape,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            colors = TextFieldDefaults.textFieldColors(
+                containerColor = Color(10, 10, 10),
+                textColor = Color.White,
+                cursorColor = cursColor,
+                placeholderColor = Color.Gray,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent
+            ),
+            modifier = Modifier
+                .padding(horizontal = 15.dp)
+                .fillMaxWidth()
+                .height(56.dp),
+            interactionSource = remember { MutableInteractionSource() }
+                .also { interactionSource ->
+                    LaunchedEffect(interactionSource) {
+                        interactionSource.interactions.collect {
+                            if (it is PressInteraction.Release) {
+                                keyboardOpened()
+                            }
+                        }
+                    }
+                },
+            singleLine = true
+        )
+    }
+
+    private fun transitionState(context : Context, state : ClientState)
+    {
+        clearUiStateInfo()
+        mClientInfo.value!!.clientState = state
+        closeKeyboard(context)
+    }
+
+    @Composable
+    private fun loginScreen(context : Context)
+    {
+        val passwordString = "Password:"
+        
+        Surface(modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                onClick = { closeKeyboard(context) },
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null))
+        {
+            Column(  modifier = Modifier
+                .verticalScroll(
+                    rememberScrollState()
+                )
+                .height(IntrinsicSize.Max)
+                .width(IntrinsicSize.Max)
+                .background(color = Color.Black))
+            {
+                Spacer(modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.2f))
+
+                emailBox(context);
+
+                Spacer(modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.1f)
+                    )
+
+                passwordBox(context, passwordString)
+
+                Spacer(modifier = Modifier
+                    .height(10.dp)
+                    .fillMaxWidth())
+
+                Box(modifier = Modifier
+                    .width(100.dp)
+                    .height(56.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .background(color = Color(50, 32, 122))
+                    .clickable(
+                        onClick = { transitionState(context, ClientState.LOGGED_IN) }
+                    )
+                )
+                {
+                    Text(
+                        text = "Login", color = Color.White, textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .padding(horizontal = 1.dp, vertical = 1.dp)
+                            .align(Alignment.Center)
+                    )
+                }
+
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .background(color = Color.Black)
+                )
+
+                Box(modifier = Modifier
+                    .width(100.dp)
+                    .height(56.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .background(color = Color(50, 32, 122))
+                    .clickable { transitionState(context, ClientState.CREATE_ACC) }
+                )
+                {
+                    Text(
+                        text = "Create Account", color = Color.White, textAlign = TextAlign.Center,
+                        modifier = Modifier
+                        .padding(horizontal = 1.dp, vertical = 1.dp)
+                        .align(Alignment.Center)
+                    )
+                }
             }
         }
     }
@@ -533,13 +624,11 @@ class MainActivity : ComponentActivity()
 
         //Create sockets
         setContent {
-            if (mClientInfo.value!!.clientLoggedIn)
+            when(mClientInfo.value!!.clientState)
             {
-                MainChat(context)
-            }
-            else
-            {
-                loginScreen(context)
+                ClientState.LOGGED_OUT -> loginScreen(context)
+                ClientState.LOGGED_IN -> MainChat(context)
+                ClientState.CREATE_ACC -> createAccScreen(context)
             }
         }
     }

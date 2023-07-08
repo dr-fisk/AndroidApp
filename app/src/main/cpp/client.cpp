@@ -257,7 +257,7 @@ int32_t sendMsg(std::string &rMsg, const int32_t cFd)
 int32_t pollServer(jobject obj)
 {
     JNIEnv *env = nullptr;
-    const int32_t SLEEP_TIME = 2;
+    const int32_t SLEEP_TIME = 5;
     std::string msg = "hey";
 
     GetJniEnv(gpVm, &env);
