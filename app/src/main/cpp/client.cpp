@@ -101,7 +101,7 @@ int32_t openSslConnect(const int32_t cClientFd, const int32_t cTimeout)
 
         if (0 >= status)
         {
-            __android_log_print(ANDROID_LOG_ERROR, "openSslConnect", "Failed SSL");
+//            __android_log_print(ANDROID_LOG_ERROR, "openSslConnect", "Failed SSL");
             return -1;
         }
     }
@@ -121,7 +121,7 @@ int32_t checkConnectionStatus(sockaddr_in &rServerAddr, const int32_t cClientFd,
     // Connection is not in progress so no connection can happen return failure
     if (-1 == status && errno != EINPROGRESS)
     {
-        __android_log_print(ANDROID_LOG_ERROR, "openSslConnect", "Connection not in progress");
+//        __android_log_print(ANDROID_LOG_ERROR, "openSslConnect", "Connection not in progress");
         return -1;
     }
 
@@ -134,11 +134,11 @@ int32_t checkConnectionStatus(sockaddr_in &rServerAddr, const int32_t cClientFd,
         // Get the error code returned from select using getsockopt
         if (0 == getsockopt(cClientFd, SOL_SOCKET, SO_ERROR, &status, &statusSize))
         {
-            __android_log_print(ANDROID_LOG_ERROR, "openSslConnect", "getsockopt");
+//            __android_log_print(ANDROID_LOG_ERROR, "openSslConnect", "getsockopt");
             // getsockopt error code is good one last check needed
             if (0 == status)
             {
-                __android_log_print(ANDROID_LOG_ERROR, "openSslConnect", "Checking peer");
+//                __android_log_print(ANDROID_LOG_ERROR, "openSslConnect", "Checking peer");
                 // Check to see if actual connection established
                 status = getpeername(cClientFd, (sockaddr *) &rServerAddr, &serverSize);
             }
@@ -204,9 +204,13 @@ int32_t attemptConnection(const std::string &crIp, const int32_t cTimeout)
         num_tries ++;
         close(clientFd);
         clientFd = -1;
-        SSL_shutdown(gpSsl);
-        SSL_free(gpSsl);
-        gpSsl = nullptr;
+
+        if (nullptr != gpSsl)
+        {
+            SSL_shutdown(gpSsl);
+            SSL_free(gpSsl);
+            gpSsl = nullptr;
+        }
     }
 
     if (-1 == status)
@@ -258,9 +262,12 @@ int32_t pollServer(jobject obj)
 {
     JNIEnv *env = nullptr;
     const int32_t SLEEP_TIME = 5;
-    std::string msg = "hey";
+    nlohmann::json pollMsg;
+    nlohmann::json pollMsg2;
+    pollMsg["Event"] = "Poll";
 
     GetJniEnv(gpVm, &env);
+    std::string msg;
 
     //Have shutdown var
     while(true)
@@ -269,6 +276,7 @@ int32_t pollServer(jobject obj)
 
         if (nullptr != gpSsl)
         {
+            msg = to_string(pollMsg);
             if (0 > sendMsg(msg, env->CallIntMethod(obj, gGetClientFd)))
             {
                 if (0 < env->CallIntMethod(obj, gGetClientFd))
@@ -311,14 +319,19 @@ Java_com_example_helloworld_MainActivity_connectToServer(JNIEnv * env, jobject o
 
 extern "C"
 void Java_com_example_helloworld_MainActivity_close(JNIEnv * env, jobject obj, jint fd) {
-    if (-1 != fd)
-    {
+    if (-1 != fd) {
         close(fd);
     }
 
-    SSL_shutdown(gpSsl);
-    SSL_free(gpSsl);
-    SSL_CTX_free(gpCtx);
+    if (nullptr != gpSsl) {
+        SSL_shutdown(gpSsl);
+        SSL_free(gpSsl);
+    }
+
+    if (nullptr != gpCtx)
+    {
+        SSL_CTX_free(gpCtx);
+    }
 }
 
 extern "C" JNIEXPORT jint JNICALL
@@ -326,5 +339,10 @@ Java_com_example_helloworld_MainActivity_sendText(JNIEnv * env, jobject obj, jin
 {
     std::string val = env->GetStringUTFChars(msg, NULL);
     // Add Json
-    return sendMsg(val, fd);
+    if (nullptr != gpSsl)
+    {
+        return sendMsg(val, fd);
+    }
+
+    return -1;
 }

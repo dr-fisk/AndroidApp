@@ -29,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -45,6 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -54,6 +56,8 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import org.intellij.lang.annotations.JdkConstants.HorizontalAlignment
+import org.json.JSONObject
+import java.security.MessageDigest
 
 enum class ClientState(val rgb: Int)
 {
@@ -107,6 +111,49 @@ class MainActivity : ComponentActivity()
     external fun connectToServer() : Int
     external fun close(fd : Int)
     external fun sendText(fd : Int, msg : String) : Int
+
+    fun sendAccountCreationMsg()
+    {
+        var msg = JSONObject()
+        var msgData = JSONObject()
+        val md = MessageDigest.getInstance("SHA-256")
+
+        msg.put("Event", "CreateAccount")
+        msgData.put("Email", mUiState.value!!.messageText)
+        msgData.put("Password", md.digest(mUiState.value!!.passwordText.toByteArray()))
+        msg.put("Data", msgData)
+
+
+        sendText(mClientInfo.value!!.clientFd, msg.toString())
+    }
+
+    fun sendTextMsg() : Boolean
+    {
+        var msg = JSONObject()
+        var msgData = JSONObject()
+        msg.put("Event", "SendText")
+        msgData.put("Text", mUiState.value!!.messageText)
+        msg.put("Data", msgData)
+
+        sendText(mClientInfo.value!!.clientFd, msg.toString())
+        return true;
+    }
+
+    fun loginServerRequest()
+    {
+        var msg = JSONObject()
+        var msgData = JSONObject()
+        val md = MessageDigest.getInstance("SHA-256")
+
+        msg.put("Event", "Login")
+        msgData.put("Email", md.digest(mUiState.value!!.messageText.toByteArray()))
+        msgData.put("Password", md.digest(mUiState.value!!.passwordText.toByteArray()))
+        msg.put("Data", msgData)
+
+
+        sendText(mClientInfo.value!!.clientFd, msg.toString())
+    }
+
     @Composable
     fun ChatScreen(context : Context)
     {
@@ -189,10 +236,11 @@ class MainActivity : ComponentActivity()
     private fun sendMsg()
     {
         if (mUiState.value!!.messageText.isNotEmpty()) {
-            if(0 > sendText(mClientInfo.value!!.clientFd, mUiState.value!!.messageText))
+            if(!sendTextMsg())
             {
                Log.e("sendMsg", "Msg failed to send")
             }
+
             mUiState.value!!.messageText = ""
         }
     }
@@ -284,11 +332,48 @@ class MainActivity : ComponentActivity()
         }
     }
 
+    fun createAccountHandler(context : Context) : Boolean
+    {
+        if ((mUiState.value!!.passwordText != mUiState.value!!.confPasswordText)
+            || (mUiState.value!!.passwordText.isEmpty() && mUiState.value!!.confPasswordText.isEmpty()))
+        {
+            return false
+        }
+
+        sendAccountCreationMsg()
+        return true
+    }
+
     @Composable
     fun createAccScreen(context : Context)
     {
+        var passwordErr = ""
         val confirmPasswordString = "Confirm Password:"
         val passwordString = "Password:"
+        var passwordsNoErr = remember { mutableStateOf(true)}
+        var confPassLastSize = remember { mutableStateOf(0)}
+        var passLastSize = remember{ mutableStateOf(0)}
+
+        if (!passwordsNoErr.value)
+        {
+            if ((confPassLastSize.value != mUiState.value!!.confPasswordText.length) ||
+                (passLastSize.value != mUiState.value!!.passwordText.length))
+            {
+                passwordErr = ""
+                passwordsNoErr.value = true
+            }
+            else if (mUiState.value!!.passwordText.isEmpty() && mUiState.value!!.confPasswordText.isEmpty())
+            {
+                passwordErr = "Please enter a password"
+            }
+            else
+            {
+                passwordErr = "Entered passwords do not match"
+            }
+        }
+
+        passLastSize.value = mUiState.value!!.passwordText.length
+        confPassLastSize.value = mUiState.value!!.confPasswordText.length
 
         Surface(modifier = Modifier
             .fillMaxSize()
@@ -316,11 +401,17 @@ class MainActivity : ComponentActivity()
                 Box(modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(0.1f))
+                {
+                    Text(text = passwordErr, color = Color.Red,
+                         modifier = Modifier
+                             .padding(horizontal = 15.dp)
+                             .align(Alignment.BottomStart))
+                }
 
                 passwordBox(context, passwordString)
 
                 Spacer(modifier = Modifier
-                    .height(40.dp)
+                    .height(15.dp)
                     .fillMaxWidth())
 
                 confPasswordBox(context, confirmPasswordString)
@@ -338,7 +429,7 @@ class MainActivity : ComponentActivity()
                     .align(Alignment.CenterHorizontally)
                     .background(color = Color(50, 32, 122))
                     .clickable(
-                        onClick = { closeKeyboard(context) }
+                        onClick = { passwordsNoErr.value = createAccountHandler(context) }
                     )
                 )
                 {
@@ -509,10 +600,16 @@ class MainActivity : ComponentActivity()
         )
     }
 
-    private fun transitionState(context : Context, state : ClientState)
-    {
+    private fun transitionState(context : Context, state : ClientState) {
         clearUiStateInfo()
         mClientInfo.value!!.clientState = state
+
+        // Todo handle login failure
+        if (ClientState.LOGGED_IN == state)
+        {
+            loginServerRequest()
+        }
+
         closeKeyboard(context)
     }
 
@@ -520,13 +617,15 @@ class MainActivity : ComponentActivity()
     private fun loginScreen(context : Context)
     {
         val passwordString = "Password:"
-        
+        var interactionSource = remember { MutableInteractionSource() }
+
         Surface(modifier = Modifier
             .fillMaxSize()
             .clickable(
                 onClick = { closeKeyboard(context) },
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null))
+                interactionSource = interactionSource,
+                indication = null
+            ))
         {
             Column(  modifier = Modifier
                 .verticalScroll(
@@ -583,14 +682,19 @@ class MainActivity : ComponentActivity()
                     .height(56.dp)
                     .align(Alignment.CenterHorizontally)
                     .background(color = Color(50, 32, 122))
-                    .clickable { transitionState(context, ClientState.CREATE_ACC) }
-                )
+                    .clickable
+                        (
+                        onClick = { transitionState(context, ClientState.CREATE_ACC) },
+                        interactionSource = interactionSource,
+                        indication = rememberRipple(color = Color.White)
+                    )
+                    )
                 {
                     Text(
                         text = "Create Account", color = Color.White, textAlign = TextAlign.Center,
                         modifier = Modifier
-                        .padding(horizontal = 1.dp, vertical = 1.dp)
-                        .align(Alignment.Center)
+                            .padding(horizontal = 1.dp, vertical = 1.dp)
+                            .align(Alignment.Center)
                     )
                 }
             }
