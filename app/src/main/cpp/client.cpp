@@ -268,6 +268,8 @@ int32_t pollServer(jobject obj)
 
     GetJniEnv(gpVm, &env);
     std::string msg;
+    std::unique_lock<std::mutex> sendLock(gSendMutex);
+    sendLock.unlock();
 
     //Have shutdown var
     while(true)
@@ -279,6 +281,7 @@ int32_t pollServer(jobject obj)
             msg = to_string(pollMsg);
             if (0 > sendMsg(msg, env->CallIntMethod(obj, gGetClientFd)))
             {
+                sendLock.lock();
                 if (0 < env->CallIntMethod(obj, gGetClientFd))
                 {
                     close(env->CallIntMethod(obj, gGetClientFd));
@@ -294,15 +297,19 @@ int32_t pollServer(jobject obj)
                         env->CallVoidMethod(obj, gSetClientFd, fd);
                     }
                 }
+
+                sendLock.unlock();
             }
         }
         else
         {
+            sendLock.lock();
             int32_t fd = connectToServer(100);
             if (0 <= fd)
             {
                 env->CallVoidMethod(obj, gSetClientFd, fd);
             }
+            sendLock.unlock();
         }
     }
     return 0;

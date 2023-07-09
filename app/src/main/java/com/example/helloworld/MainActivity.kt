@@ -3,6 +3,7 @@ package com.example.helloworld
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
+import android.util.Patterns
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.ScrollView
@@ -58,12 +59,21 @@ import androidx.lifecycle.ViewModel
 import org.intellij.lang.annotations.JdkConstants.HorizontalAlignment
 import org.json.JSONObject
 import java.security.MessageDigest
+import java.util.regex.Pattern
 
-enum class ClientState(val rgb: Int)
+enum class ClientState(code : Int)
 {
     LOGGED_OUT(0x01),
     LOGGED_IN(0x02),
     CREATE_ACC(0x03)
+}
+
+enum class ErrorCodes(code : Int)
+{
+    LOGIN_FAILURE(0xFFF6),
+    EMPTY_EMAIL(0xFFF5),
+    EMPTY_PASSWORD(0xFFF4),
+    EMPTY_CONF_PASSWORD(0xFFF3)
 }
 
 class ClientInfo
@@ -82,6 +92,8 @@ class UiState : ViewModel()
 
 class MainActivity : ComponentActivity()
 {
+    private val maxEmailSize by mutableStateOf(320)
+    private val maxPasswordSize by mutableStateOf(32)
     companion object
     {
       init {
@@ -139,7 +151,7 @@ class MainActivity : ComponentActivity()
         return true;
     }
 
-    fun loginServerRequest()
+    fun loginServerRequest() : Boolean
     {
         var msg = JSONObject()
         var msgData = JSONObject()
@@ -152,6 +164,9 @@ class MainActivity : ComponentActivity()
 
 
         sendText(mClientInfo.value!!.clientFd, msg.toString())
+
+        //Temp interpret error codes
+        return true
     }
 
     @Composable
@@ -353,7 +368,12 @@ class MainActivity : ComponentActivity()
         var passwordsNoErr = remember { mutableStateOf(true)}
         var confPassLastSize = remember { mutableStateOf(0)}
         var passLastSize = remember{ mutableStateOf(0)}
+        var emailErr = ""
+        var emailNoErr = remember{ mutableStateOf(true) }
+        var emailLastSize = remember{ mutableStateOf(0)}
 
+
+        // create functions for below???
         if (!passwordsNoErr.value)
         {
             if ((confPassLastSize.value != mUiState.value!!.confPasswordText.length) ||
@@ -372,8 +392,26 @@ class MainActivity : ComponentActivity()
             }
         }
 
+        if (!emailNoErr.value)
+        {
+            if (mUiState.value!!.messageText.length != emailLastSize.value)
+            {
+                emailErr = ""
+                emailNoErr.value = true
+            }
+            else if (mUiState.value!!.messageText.isEmpty())
+            {
+                emailErr = "Please enter an email"
+            }
+            else
+            {
+                emailErr = "Please enter a valid email"
+            }
+        }
+
         passLastSize.value = mUiState.value!!.passwordText.length
         confPassLastSize.value = mUiState.value!!.confPasswordText.length
+        emailLastSize.value = mUiState.value!!.messageText.length
 
         Surface(modifier = Modifier
             .fillMaxSize()
@@ -392,9 +430,16 @@ class MainActivity : ComponentActivity()
                 .width(IntrinsicSize.Max)
                 .background(color = Color.Black))
             {
-                Spacer(modifier = Modifier
+                Box(modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(0.2f))
+                {
+                    Text(text = emailErr,
+                         modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(horizontal = 15.dp),
+                         color = Color.Red)
+                }
 
                 emailBox(context);
 
@@ -429,7 +474,8 @@ class MainActivity : ComponentActivity()
                     .align(Alignment.CenterHorizontally)
                     .background(color = Color(50, 32, 122))
                     .clickable(
-                        onClick = { passwordsNoErr.value = createAccountHandler(context) }
+                        onClick = { passwordsNoErr.value = createAccountHandler(context)
+                                    emailNoErr.value = isValidEmail() }
                     )
                 )
                 {
@@ -472,7 +518,12 @@ class MainActivity : ComponentActivity()
         {
             TextField(
                 value = mUiState.value!!.confPasswordText,
-                onValueChange = { mUiState.value!!.confPasswordText = it },
+                onValueChange = {
+                                    if (it.length <= maxPasswordSize)
+                                    {
+                                        mUiState.value!!.confPasswordText = it
+                                    }
+                                },
                 label = { Text(str) },
                 placeholder = { Text("") }, shape = RectangleShape,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -525,7 +576,12 @@ class MainActivity : ComponentActivity()
         {
             TextField(
                 value = mUiState.value!!.passwordText,
-                onValueChange = { mUiState.value!!.passwordText = it },
+                onValueChange = {
+                                    if (it.length <= maxPasswordSize)
+                                    {
+                                        mUiState.value!!.passwordText = it
+                                    }
+                },
                 label = { Text(str) },
                 placeholder = { Text("") }, shape = RectangleShape,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -569,7 +625,12 @@ class MainActivity : ComponentActivity()
         }
         TextField(
             value = mUiState.value!!.messageText,
-            onValueChange = { mUiState.value!!.messageText = it },
+            onValueChange = {
+                               if (it.length <= maxEmailSize)
+                               {
+                                   mUiState.value!!.messageText = it
+                               }
+                            },
             label = { Text("Email:") },
             placeholder = { Text("") }, shape = RectangleShape,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -600,15 +661,28 @@ class MainActivity : ComponentActivity()
         )
     }
 
+    fun isValidEmail() : Boolean
+    {
+        return Patterns.EMAIL_ADDRESS.matcher(mUiState.value!!.messageText).matches()
+    }
+
+    fun loginHandler(context : Context) : Boolean {
+        if (mUiState.value!!.messageText.isEmpty() || mUiState.value!!.messageText.isEmpty()) {
+            return false;
+        }
+
+
+        if (loginServerRequest())
+        {
+            transitionState(context, ClientState.LOGGED_IN)
+        }
+
+        return true
+    }
+
     private fun transitionState(context : Context, state : ClientState) {
         clearUiStateInfo()
         mClientInfo.value!!.clientState = state
-
-        // Todo handle login failure
-        if (ClientState.LOGGED_IN == state)
-        {
-            loginServerRequest()
-        }
 
         closeKeyboard(context)
     }
@@ -658,7 +732,7 @@ class MainActivity : ComponentActivity()
                     .align(Alignment.CenterHorizontally)
                     .background(color = Color(50, 32, 122))
                     .clickable(
-                        onClick = { transitionState(context, ClientState.LOGGED_IN) }
+                        onClick = { loginHandler(context) }
                     )
                 )
                 {
