@@ -1,4 +1,4 @@
-package com.example.helloworld.ui.theme
+package com.example.syncup.ui.theme
 
 import android.app.Activity
 import android.os.Build

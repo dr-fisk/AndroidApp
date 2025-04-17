@@ -34,8 +34,8 @@ enum RetType
     INVALID_ADDRESS = -2
 };
 
-static const std::string gPUBLIC_IP = "73.14.16.192";
-static const std::string gSERVER_HOME_IP = "10.0.0.50";
+static const std::string gPUBLIC_IP = "71.56.211.239";
+static const std::string gSERVER_HOME_IP = "10.0.0.129";
 static const uint8_t gRETRIES = 3;
 
 bool GetJniEnv(JavaVM *vm, JNIEnv **env)
@@ -44,15 +44,15 @@ bool GetJniEnv(JavaVM *vm, JNIEnv **env)
     *env = nullptr;
     // Check if the current thread is attached to the VM
     auto get_env_result = vm->GetEnv((void**)env, JNI_VERSION_1_6);
-    if (get_env_result == JNI_EDETACHED) {
+//    if (get_env_result == JNI_EDETACHED) {
         if (vm->AttachCurrentThread(env, NULL) == JNI_OK) {
             did_attach_thread = true;
         } else {
             // Failed to attach thread. Throw an exception if you want to.
         }
-    } else if (get_env_result == JNI_EVERSION) {
-        // Unsupported JNI version. Throw an exception if you want to.
-    }
+//     else if (get_env_result == JNI_EVERSION) {
+//        // Unsupported JNI version. Throw an exception if you want to.
+//    }
     return did_attach_thread;
 }
 
@@ -155,10 +155,10 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
         return JNI_ERR;
     }
 
-    gMainActivity = env->FindClass("com/example/helloworld/MainActivity");
+    gMainActivity = env->FindClass("com/example/syncup/MainActivity");
     gGetClientFd = env->GetMethodID(gMainActivity, "getClientFd", "()I");
     gSetClientFd = env->GetMethodID(gMainActivity, "setClientFd", "(I)V");
-    gpCtx = SSL_CTX_new(TLS_client_method());
+    gpCtx = SSL_CTX_new(TLS_method());
 //    __android_log_print(ANDROID_LOG_ERROR, "TRACKERS", "%d Fd", env->CallIntMethod(obj, gGetClientFd));
 
     return JNI_VERSION_1_6;
@@ -167,7 +167,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 int32_t attemptConnection(const std::string &crIp, const int32_t cTimeout)
 {
     sockaddr_in server;
-    const int32_t SSL_TIMEOUT = 1000;
+    const int32_t SSL_TIMEOUT = 5000;
 
     server.sin_family = AF_INET;
     server.sin_port = htons(2721);
@@ -233,29 +233,178 @@ int32_t connectToServer(const int32_t cTimeout)
 
     return fd;
 }
-int32_t sendMsg(std::string &rMsg, const int32_t cFd)
+
+int32_t recvUtility(const int32_t cClientFd, void* pBuff, const uint32_t cBytesToRecv, int32_t cTimeoutMs)
+{
+    uint32_t bytesRecvd = 0;
+    int32_t bytesReturnedSSL = 0;
+
+    do
+    {
+        bytesReturnedSSL = SSL_read(gpSsl, ((char *) pBuff) + bytesRecvd,
+                                    cBytesToRecv - bytesRecvd);
+        if (bytesReturnedSSL > 0) {
+            bytesRecvd += bytesReturnedSSL;
+        }
+        else {
+            if(SSL_ERROR_WANT_READ ==  SSL_get_error(gpSsl, bytesReturnedSSL))
+            {
+                continue;
+            }
+            else {
+                __android_log_print(ANDROID_LOG_ERROR, "Recv",
+                                    "OpenSsl read returned an error of: %d",
+                                    SSL_get_error(gpSsl, bytesReturnedSSL));
+                __android_log_print(ANDROID_LOG_ERROR, "Recv",
+                                    "Errno: %d",
+                                    errno);
+            }
+            return -1;
+        }
+    }
+    while(bytesRecvd < cBytesToRecv);
+
+    return bytesRecvd;
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_syncup_MainActivity_recv(JNIEnv * env, jobject obj,const jint cClientFd, jbyteArray pBuff, const jint cBytesToRecv, const jint cTimeoutMs)
+{
+    uint16_t payload_size = 0;
+    int32_t bytesRecvd = 0;
+    pollfd fds[1];
+    fds[0].fd = cClientFd;
+    fds[0].events = POLLIN;
+    fds[0].revents = 0;
+    int32_t pollret = 0;
+    uint32_t timeoutTime = 0;
+    const uint8_t POLL_TIME = 100;
+
+    while(timeoutTime <= cTimeoutMs) {
+        pollret = poll(fds, 1, POLL_TIME);
+
+        if(pollret > 0) {
+
+            if (-1 == recvUtility(cClientFd, &payload_size, sizeof(payload_size), cTimeoutMs)) {
+                __android_log_print(ANDROID_LOG_ERROR, "Recv", "TCP Header recv timed out.");
+                return -1;
+            }
+
+            payload_size = ntohs(payload_size);
+
+            if (payload_size > cBytesToRecv) {
+                // temp will need to recv all data left in buffer
+                return -1;
+            }
+
+            jboolean notCopy = JNI_FALSE;
+            char* buff = (char*)env->GetByteArrayElements(pBuff, &notCopy);
+            bytesRecvd = recvUtility(cClientFd, buff, payload_size, cTimeoutMs);
+
+            if (-1 == bytesRecvd)
+            {
+                __android_log_print(ANDROID_LOG_ERROR, "Recv", "Payload recv timed out.");
+                return -1;
+            }
+
+            buff[bytesRecvd] = '\0';
+
+            env->ReleaseByteArrayElements(pBuff, (jbyte*)buff, 0);
+            return bytesRecvd;
+        }
+        else if (0 > pollret)
+        {
+            return -1;
+        }
+        else
+        {
+            timeoutTime += POLL_TIME;
+        }
+    }
+
+    return -1;
+}
+
+
+int32_t sendMsg(char* pBuff, const uint32_t cBuffSize, const int32_t cFd)
 {
     std::unique_lock<std::mutex> lock(gSendMutex);
-    const int16_t MAX_BUFF_SIZE = 1500;
-    int16_t msgSize = htons(rMsg.size());
-    int16_t origSize = rMsg.size();
+    const int16_t MAX_BUFF_SIZE = 2500;
+    const int16_t msgSize = htons(cBuffSize);
+    int16_t origSize = cBuffSize;
 
     if (MAX_BUFF_SIZE < origSize)
     {
+        __android_log_print(ANDROID_LOG_ERROR, "Send Msg", "Unsupported buff size of %d.", origSize);
+
         return -1;
     }
 
+    const uint16_t SIZE = sizeof(msgSize) + cBuffSize;
+
     char buff[MAX_BUFF_SIZE + sizeof(msgSize)];
+
+    uint32_t bytesWritten = 0;
+    int32_t bytesReturnedSSL = 0;
+    uint32_t timeoutTime = 0;
+    pollfd fds[1];
+    int32_t pollret = 1;
+    fds[0].fd = cFd;
+    fds[0].events = POLLOUT;
+    fds[0].revents = 0;
+    const uint8_t POLL_TIME = 100;
+    const uint16_t cTimeOutMs = 5000; // Temp TODO: make parameter
 
     buff[0] = (0xff & msgSize);
     buff[1] = (0xff & (msgSize >> 8));
-    memcpy(&buff[0] + sizeof(msgSize), rMsg.c_str(), origSize);
+    memcpy(&buff[0] + sizeof(msgSize), pBuff, origSize);
 
-    int32_t ret = SSL_write(gpSsl, buff, origSize + sizeof(msgSize));
+    do
+    {
+        pollret = poll(fds, 1, POLL_TIME);
+
+        if (0 < pollret)
+        {
+            bytesReturnedSSL = SSL_write(gpSsl, (char *)buff + bytesWritten, SIZE - bytesWritten);
+
+            if (bytesReturnedSSL > 0)
+            {
+                bytesWritten += bytesReturnedSSL;
+                timeoutTime = 0;
+            }
+            else
+            {
+                if (SSL_ERROR_WANT_WRITE == SSL_get_error(gpSsl, bytesReturnedSSL))
+                {
+                    continue;
+                }
+                __android_log_print(ANDROID_LOG_ERROR, "Send Msg", "OpenSsl Write returned an error of: %d.", bytesReturnedSSL);
+                return -1;
+            }
+        }
+        else if (0 == pollret)
+        {
+            timeoutTime += POLL_TIME;
+
+            if (timeoutTime >= cTimeOutMs)
+            {
+                __android_log_print(ANDROID_LOG_ERROR, "Send Msg", "Timeout occurred trying to send.");
+                return -1;
+            }
+        }
+        else
+        {
+            __android_log_print(ANDROID_LOG_ERROR, "Send Msg", "Poll error occurred trying to send %d.", pollret);
+            return -1;
+        }
+    }
+    while(bytesWritten < SIZE);
+
+//    __android_log_print(ANDROID_LOG_ERROR, "Send", "%d sent.", bytesWritten);
 
     lock.unlock();
 
-    return ret;
+    return bytesWritten;
 }
 
 int32_t pollServer(jobject obj)
@@ -264,13 +413,18 @@ int32_t pollServer(jobject obj)
     const int32_t SLEEP_TIME = 5;
     nlohmann::json pollMsg;
     nlohmann::json pollMsg2;
-    pollMsg["Event"] = "Poll";
+    pollMsg["Event"] = 10;
+    pollfd fds[1];
 
     GetJniEnv(gpVm, &env);
     std::string msg;
     std::unique_lock<std::mutex> sendLock(gSendMutex);
     sendLock.unlock();
 
+    int32_t pollret = 0;
+    fds[0].fd = env->CallIntMethod(obj, gGetClientFd);
+    fds[0].events = POLLOUT;
+    fds[0].revents = 0;
     //Have shutdown var
     while(true)
     {
@@ -279,7 +433,7 @@ int32_t pollServer(jobject obj)
         if (nullptr != gpSsl)
         {
             msg = to_string(pollMsg);
-            if (0 > sendMsg(msg, env->CallIntMethod(obj, gGetClientFd)))
+            if (0 > sendMsg(&msg[0], msg.size(), env->CallIntMethod(obj, gGetClientFd)))
             {
                 sendLock.lock();
                 if (0 < env->CallIntMethod(obj, gGetClientFd))
@@ -295,6 +449,8 @@ int32_t pollServer(jobject obj)
                     if (0 <= fd)
                     {
                         env->CallVoidMethod(obj, gSetClientFd, fd);
+
+                        fds[0].fd = fd;
                     }
                 }
 
@@ -316,7 +472,7 @@ int32_t pollServer(jobject obj)
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_com_example_helloworld_MainActivity_connectToServer(JNIEnv * env, jobject obj)
+Java_com_example_syncup_MainActivity_connectToServer(JNIEnv * env, jobject obj)
 {
     const int INIT_TIMEOUT = 1000;
     int32_t fd = connectToServer(INIT_TIMEOUT);
@@ -325,7 +481,7 @@ Java_com_example_helloworld_MainActivity_connectToServer(JNIEnv * env, jobject o
 }
 
 extern "C"
-void Java_com_example_helloworld_MainActivity_close(JNIEnv * env, jobject obj, jint fd) {
+void Java_com_example_syncup_MainActivity_close(JNIEnv * env, jobject obj, jint fd) {
     if (-1 != fd) {
         close(fd);
     }
@@ -342,14 +498,26 @@ void Java_com_example_helloworld_MainActivity_close(JNIEnv * env, jobject obj, j
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_com_example_helloworld_MainActivity_sendText(JNIEnv * env, jobject obj, jint fd, jstring msg)
+Java_com_example_syncup_MainActivity_sendMsg(JNIEnv * env, jobject obj, jint fd, jbyteArray msg, jint buffSize)
 {
-    std::string val = env->GetStringUTFChars(msg, NULL);
     // Add Json
     if (nullptr != gpSsl)
     {
-        return sendMsg(val, fd);
+//        __android_log_print(ANDROID_LOG_ERROR, "Send", "%d client fd.", fd);
+        jboolean notCopy = JNI_FALSE;
+        char* buff = (char*)env->GetByteArrayElements(msg, &notCopy);
+
+//        __android_log_print(ANDROID_LOG_ERROR, "Send", "%s.", buff);
+
+        const int32_t ret = sendMsg(buff, buffSize, fd);
+//        __android_log_print(ANDROID_LOG_ERROR, "Send", "Sent %d bytes.", ret);
+
+        env->ReleaseByteArrayElements(msg, (jbyte*)buff, 0);
+        return ret;
     }
+
+
+    __android_log_print(ANDROID_LOG_ERROR, "Command", "%s", msg);
 
     return -1;
 }
